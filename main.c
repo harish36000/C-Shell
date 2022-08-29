@@ -27,6 +27,7 @@ char systemName[MAX_LENGTH];
 char rootDir[MAX_LENGTH];
 char prevDir[MAX_LENGTH];
 
+//Helper Functions
 void newLine()
 {
     printf("\n\n");
@@ -34,8 +35,12 @@ void newLine()
 char *pathMatchUpdate(char *rootDir, char *currDir)
 {
     //printf("%s\n%s\n", rootDir, currDir);
-
     char *newPath = malloc(MAX_LENGTH);
+    if (strlen(currDir) < strlen(rootDir))
+    {
+        strcpy(newPath, currDir);
+        return newPath;
+    }
 
     int equal = 1;
     long long int ptr = 0;
@@ -143,23 +148,7 @@ int parse(char command[MAX_LENGTH], char *splitChar, char tokensList[MAX_LENGTH]
     return cnt;
 }
 
-int isMultipleCmd(long long int total, char tokensList[MAX_LENGTH][MAX_LENGTH])
-{
-    char *multiList[] = {"&",
-                         ";"};
-
-    for (long long int i = 0; i < total; i++)
-    {
-        for (long long int j = 0; j < 2; j++)
-        {
-            if (strcmp(tokensList[i], multiList[j]) == 0)
-                return 1;
-        }
-    }
-
-    return 0;
-}
-
+//Specification 2 Functions - cd, echo, pwd
 void cd(long long int tokenCnt, char tokensList[MAX_LENGTH][MAX_LENGTH])
 {
 
