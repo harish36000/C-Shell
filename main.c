@@ -283,6 +283,30 @@ void pwd(long long int tokenCnt, char tokensList[MAX_LENGTH][MAX_LENGTH])
     }
     printf("%s\n", currWorkDir);
 }
+
+void executeCommand(char command[MAX_LENGTH])
+{
+    char tokensList[MAX_LENGTH][MAX_LENGTH];
+    long long int tokenCnt = parse(command, " ", tokensList);
+
+    if (strcmp(tokensList[0], "cd") == 0)
+    {
+        cd(tokenCnt, tokensList);
+    }
+    else if (strcmp(tokensList[0], "echo") == 0)
+    {
+        echo(tokenCnt, tokensList);
+    }
+    else if (strcmp(tokensList[0], "pwd") == 0)
+    {
+        pwd(tokenCnt, tokensList);
+    }
+    else
+    {
+        printf("FUNCTION NOT DEFINED!\n");
+    }
+}
+
 void readCommand()
 {
 
@@ -370,23 +394,6 @@ void readCommand()
     //     printf("%s\n", tokensList[j]);
 
     //Check if multiple commmands need to be runned together?
-
-    if (strcmp(tokensList[0], "cd") == 0)
-    {
-        cd(tokenCnt, tokensList);
-    }
-    else if (strcmp(tokensList[0], "echo") == 0)
-    {
-        echo(tokenCnt, tokensList);
-    }
-    else if (strcmp(tokensList[0], "pwd") == 0)
-    {
-        pwd(tokenCnt, tokensList);
-    }
-    else
-    {
-        printf("FUNCTION NOT DEFINED!\n");
-    }
 }
 
 void getRootDirectory()
