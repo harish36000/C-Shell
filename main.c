@@ -1,421 +1,368 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <limits.h>
-#include <fcntl.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <errno.h>
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/utsname.h>
-#include <pwd.h>
+#include "header.h"
 
-//change order
-#define MAX_LENGTH 100
+char currentUsername[MAX_LENGTH] = "";
+char currentSystemName[MAX_LENGTH] = "";
+char currentDirectoryHome[MAX_LENGTH] = "";
+char previousDirectoryHome[MAX_LENGTH] = "";
+char foreGroundProcessName[MAX_LENGTH] = "";
+int droppedProcesses[MAX_LENGTH];
 
-//Displaying User Details ---- Spec 1
-char userName[MAX_LENGTH];
-char systemName[MAX_LENGTH];
+int parent = 0;
+int foregroundProcess = 0;
 
-//Directory Flow ---- Spec 2 (cd command)
-char rootDir[MAX_LENGTH];
-char prevDir[MAX_LENGTH];
+Process bgProcess[MAX_PROCESS_COUNT];
+Process fgProcess[MAX_PROCESS_COUNT];
 
-//Helper Functions
-void newLine()
+ll totalBGProcess = 1;
+ll totalBGProcessHistory = 1;
+int droppedProcessesCounter = 0;
+
+bool dontPrintPrompt = false;
+
+char *historyTracker[HISTORY_MAX_SIZE + 1];
+
+time_t getStartTime(pid_t pid)
 {
-    printf("\n\n");
-}
-char *pathMatchUpdate(char *rootDir, char *currDir)
-{
-    //printf("%s\n%s\n", rootDir, currDir);
-    char *newPath = malloc(MAX_LENGTH);
-    if (strlen(currDir) < strlen(rootDir))
+    for (int i = 0; i < MAX_PROCESS_COUNT; i++)
     {
-        strcpy(newPath, currDir);
-        return newPath;
-    }
-
-    int equal = 1;
-    long long int ptr = 0;
-    long long int newPtr = 1;
-
-    strcpy(newPath, "~");
-
-    while (ptr < strlen(currDir))
-    {
-        if (equal)
+        if (bgProcess[i].name != NULL && bgProcess[i].pid == pid)
         {
-            if (rootDir[ptr] == currDir[ptr])
-                ptr++;
-            else
-            {
-                newPath[newPtr++] = currDir[ptr++];
-                equal = 0;
-            }
+            return bgProcess[i].startTime;
         }
+    }
+}
+
+void ctrlZHandler(int signal)
+{
+
+    if (foregroundProcess)
+    {
+        backgroundNodeAddition(foregroundProcess, foreGroundProcessName);
+        kill(foregroundProcess, 2);
+        foregroundProcess = 0;
+        printf("\r");
+    }
+}
+
+void ctrlCHandler(int signal)
+{
+
+    if (foregroundProcess)
+    {
+
+        kill(foregroundProcess, 2);
+        foregroundProcess = 0;
+        printf("\r");
+    }
+}
+
+void childTermination(int signal)
+{
+    int status;
+    pid_t wpid = waitpid(-1, &status, WNOHANG);
+
+    if (wpid > 0 && wpid != foregroundProcess)
+    {
+        Process a = findBGProcessName(wpid);
+
+        if (WIFEXITED(status))
+            printf("%s with pid %d exited normally\n", a.name, a.pid);
         else
-        {
-            newPath[newPtr++] = currDir[ptr++];
-        }
+            printf("%s with pid %d exited abnormally\n", a.name, a.pid);
+
+        shellInit();
+    }
+}
+
+void getRootDirectory()
+{
+    if (getcwd(currentDirectoryHome, MAX_LENGTH) == NULL)
+    {
+        printf(RED "Error getting root directory");
     }
 
-    newPath[newPtr] = '\0';
-    //printf("insdie fn: %s\n", newPath);
-
-    return (char *)newPath;
+    //in the start - we assign root = prev dir
+    if (getcwd(previousDirectoryHome, MAX_LENGTH) == NULL)
+    {
+        printf(RED "Error getting previous directory");
+    }
 }
+
 void shellInit()
 {
-    // printf("Inside shellInit() \n\n");
-
-    /*
-        varInit()
-        initialize all global variables to "";
-
-        ** IMPORTANT **
-    */
-
-    /***** GET USER AND SYSTEM INFO **********/
 
     char systemNameInit[MAX_LENGTH] = "";
     if (gethostname(systemNameInit, MAX_LENGTH) == 0)
     {
-        strcpy(systemName, systemNameInit);
-
-        // printf("SystemName: %s\n", systemName);
+        strcpy(currentSystemName, systemNameInit);
     }
     else
     {
-        perror("Error obtaining system name!");
+        printf(RED "Error obtaining system name!");
     }
 
     uid_t UserID = getuid();
     char userNameInit[MAX_LENGTH] = "";
     strcpy(userNameInit, strdup(getpwuid(UserID)->pw_name));
-    strcpy(userName, userNameInit);
+    strcpy(currentUsername, userNameInit);
     //printf("UserNameInit: %s\n", userNameInit);
 
     char currDirectoryInit[MAX_LENGTH];
     if (getcwd(currDirectoryInit, MAX_LENGTH) != NULL)
     {
         char *currDirectory = malloc(MAX_LENGTH);
-        currDirectory = pathMatchUpdate(rootDir, currDirectoryInit);
+        currDirectory = pathMatchUpdate(currentDirectoryHome, currDirectoryInit);
 
-        printf("%s@%s:%s ", userName, systemName, currDirectory);
+        printf(BLUE "<%s@%s:" CYAN "%s>", currentUsername, currentSystemName, currDirectory);
+        printf(RESET);
+
         fflush(stdout);
         //<Name@UBUNTU:~>
     }
     else
     {
-        perror("Error while obtaining directory");
-    }
-
-    // newLine();
-
-    // printf("RESULT:\n"); //----------- TAKES TIME, ASYNC -> GOES TO READCOMMAND() ---- fflush helped
-    // printf("%s", userName);
-    // printf("@");
-    // printf("%s", systemName);
-    // printf(":~");
-    // printf("%s", currDirectory);
-
-    /****************************************************/
-}
-int parse(char command[MAX_LENGTH], char *splitChar, char tokensList[MAX_LENGTH][MAX_LENGTH])
-{
-    int cnt = 0;
-
-    //    printf("Inside fn: \n");
-
-    char *token = strtok(command, (splitChar));
-    //  printf("%s\n", token);
-    long long int tokenCnt = 0;
-    while (token != NULL)
-    {
-        strcpy(tokensList[cnt], token);
-        //printf("%s\n", token);
-        token = strtok(NULL, (splitChar));
-        cnt++;
-    }
-
-    return cnt;
-}
-
-//Specification 2 Functions - cd, echo, pwd
-void cd(long long int tokenCnt, char tokensList[MAX_LENGTH][MAX_LENGTH])
-{
-
-    /***************** CHANGE DIRECTORY ********************/
-    //Cases: "string", ‘.’, ‘..’, ‘-’, ‘~’
-
-    if (tokenCnt > 2)
-    {
-        printf("Error: cd cannot take more than 2 arguments!\n");
-        return;
-    }
-    else
-    {
-        //Case 1: cd        ................    Go to Root
-        if (tokenCnt == 1)
-        {
-            //newLine();
-            //printf("cd cmd\n");
-
-            //Assigning current Directory as new Prev Directory
-            if (getcwd(prevDir, MAX_LENGTH) == NULL)
-            {
-                perror("Error updating prevDir");
-            }
-
-            if (chdir(rootDir) == -1)
-            {
-                perror("Error while moving to rootDir");
-            }
-        }
-
-        if (tokenCnt > 1)
-        {
-            //Case 2: cd .  ----- ??
-
-            //Case 3: cd .. //Case 4: cd - ---------> Prev Dir
-            //Problem: How to update prev dir
-            //prev dir -> prev of prev dir ?
-            if (strcmp(tokensList[1], "..") == 0 || strcmp(tokensList[1], "-") == 0)
-            {
-                // newLine();
-                //printf("cd .. cmd\n");
-
-                //Check if current directory is the directory in which shell was invoked
-                char currDir[MAX_LENGTH] = "";
-                if (getcwd(currDir, MAX_LENGTH) == NULL)
-                {
-                    perror("Error getting current directory");
-                }
-
-                if (strcmp(currDir, rootDir) == 0)
-                {
-                    //NEED TO FIX THIS
-                    ;
-                }
-
-                char tempPrevDir[MAX_LENGTH];
-                strcpy(tempPrevDir, prevDir);
-
-                //Assigning current Directory as new Prev Directory
-                if (getcwd(prevDir, MAX_LENGTH) == NULL)
-                {
-                    perror("Error updating prevDir");
-                }
-
-                if (chdir("..") == -1)
-                {
-                    perror("Error while moving to parent Dir");
-                }
-            }
-            //Case 5: cd ~ ---------> Change to root
-            else if (strcmp(tokensList[1], "~") == 0)
-            {
-                //newLine();
-                //printf("cd ~ cmd\n");
-
-                //Assigning current Directory as new Prev Directory
-                if (getcwd(prevDir, MAX_LENGTH) == NULL)
-                {
-                    perror("Error updating prevDir");
-                }
-
-                if (chdir(rootDir) == -1)
-                {
-                    perror("Error while moving to rootDir");
-                }
-            }
-            //Case 6: cd path
-            else
-            {
-                //printf("%s %s\n", tokensList[0], tokensList[1]);
-
-                char filePath[MAX_LENGTH] = "";
-                strcpy(filePath, tokensList[1]);
-                if (getcwd(prevDir, MAX_LENGTH) == NULL)
-                {
-                    perror("Error updating prevDir");
-                }
-
-                if (chdir(filePath) == -1)
-                {
-                    perror("Error while moving to rootDir");
-                }
-            }
-        }
-    }
-}
-void echo(long long int tokenCnt, char tokensList[MAX_LENGTH][MAX_LENGTH])
-{
-    //print all tokens
-    for (long long int it = 1; it < tokenCnt; it++)
-        printf("%s ", tokensList[it]);
-    printf("\n");
-}
-void pwd(long long int tokenCnt, char tokensList[MAX_LENGTH][MAX_LENGTH])
-{
-    char currWorkDir[MAX_LENGTH];
-    if (getcwd(currWorkDir, MAX_LENGTH) == NULL)
-    {
-        perror("Error getting pwd");
-    }
-    printf("%s\n", currWorkDir);
-}
-
-void executeCommand(char command[MAX_LENGTH])
-{
-    char tokensList[MAX_LENGTH][MAX_LENGTH];
-    long long int tokenCnt = parse(command, " ", tokensList);
-
-    if (strcmp(tokensList[0], "cd") == 0)
-    {
-        cd(tokenCnt, tokensList);
-    }
-    else if (strcmp(tokensList[0], "echo") == 0)
-    {
-        echo(tokenCnt, tokensList);
-    }
-    else if (strcmp(tokensList[0], "pwd") == 0)
-    {
-        pwd(tokenCnt, tokensList);
-    }
-    else
-    {
-        printf("FUNCTION NOT DEFINED!\n");
-    }
-}
-
-void readCommand()
-{
-
-    // printf("READ COMMAND: \n");
-
-    char currRead[2];
-
-    char inputCommand[MAX_LENGTH] = "";
-    int inputCommandPtr = 0;
-
-    //printf("Command Read Before Reading: %s\n", inputCommand);
-
-    //read till you get new line char
-    while (read(0, currRead, 1) != 0 && currRead[0] != '\n')
-    {
-        inputCommand[inputCommandPtr++] = currRead[0];
-        //printf("CurrRead: %s\n", currRead);
-    }
-
-    inputCommand[inputCommandPtr] = '\0';
-    //printf("Command Read Before Removing Spaces: %s\n", inputCommand);
-    //printf("%ld\n", strlen(inputCommand));
-
-    //remove continuous/unecesary spaces and tabspaces from read Command
-    char inputCommandUpdated[MAX_LENGTH];
-    long long int j = 0;
-    for (long long int i = 0; i < inputCommandPtr; i++)
-    {
-        if (inputCommand[i] == ' ')
-        {
-            if (j == 0)
-                continue;
-            else
-            {
-                if (inputCommandUpdated[j - 1] == ' ') //last and curr is space
-                    ;
-                else
-                    inputCommandUpdated[j++] = ' ';
-            }
-        }
-        else if (inputCommand[i] == '\t')
-        {
-            if (j == 0)
-                ;
-            else if (inputCommandUpdated[j - 1] == ' ') //if previous char is space, no need to allocate another space
-            {
-                ;
-            }
-            else //if previous char is not space
-            {
-                inputCommandUpdated[j++] = ' ';
-            }
-        }
-        else
-            inputCommandUpdated[j++] = inputCommand[i];
-    }
-
-    inputCommandUpdated[j] = '\0';
-    // printf("Command After removing additional spaces and tabs: %s\n", inputCommandUpdated);
-
-    //Get all tokens from inputCommandUpdated
-
-    char tokensList[MAX_LENGTH][MAX_LENGTH];
-    long long int tokenCnt = parse(inputCommandUpdated, ";", tokensList);
-
-    //Tokenizing commands first by ;
-    //Later for each token ---- divide by " " to extract command and arguments
-
-    for (long long int i = 0; i < tokenCnt; i++)
-    {
-        executeCommand(tokensList[i]);
-    }
-
-    // char *token = strtok(inputCommandUpdated, " ");
-    // long long int tokenCnt = 0;
-    // while (token != NULL)
-    // {
-    //     strcpy(tokensList[tokenCnt], token);
-    //     token = strtok(NULL, " ");
-    //     tokenCnt++;
-    // }
-
-    // printf("Tokens Obtained: \n");
-    // for (int j = 0; j < tokenCnt; j++)
-    //     printf("%s\n", tokensList[j]);
-
-    //Check if multiple commmands need to be runned together?
-}
-
-void getRootDirectory()
-{
-    /**********ASSIGN ROOT DIRECTORY ***********/
-    if (getcwd(rootDir, MAX_LENGTH) == NULL)
-    {
-        perror("Error getting root directory");
-    }
-
-    //in the start - we assign root = prev dir
-    if (getcwd(prevDir, MAX_LENGTH) == NULL)
-    {
-        perror("Error getting previous directory");
-    }
-
-    // printf("Got root dir as: %s\n", rootDir);
-
-    /******************************************************/
-}
-
-void startShell()
-{
-    getRootDirectory();
-
-    while (1)
-    {
-        shellInit();
-        readCommand();
+        printf(RED "Error while obtaining directory");
     }
 }
 
 int main()
 {
-    startShell();
+
+    signal(SIGTSTP, ctrlZHandler);
+    signal(SIGINT, ctrlCHandler);
+    signal(SIGCHLD, childTermination);
+
+    char individual_command[MAX_LENGTH], *input, *commands;
+    ll numCmds = 0;
+    size_t input_size = 0;
+
+    getRootDirectory();
+    parent = getpid();
+    fetchHistory();
+
+    //Initllay maintain prev and current directory as same direcrtorr
+    strcpy(previousDirectoryHome, currentDirectoryHome);
+
+    while (1)
+    {
+
+        //prints userName@systName
+        if (!dontPrintPrompt)
+            shellInit();
+        else
+            dontPrintPrompt = false;
+
+        fflush(stdout);
+
+        char temp_string[MAX_LENGTH] = "", c;
+
+        setbuf(stdout, NULL);
+        char currRead[2], temp, helper, inputCommand[MAX_LENGTH] = "";
+        int inputCommandPtr = 0;
+
+        int hasPipe = 0, hasBackgroundProcess = 0;
+
+        //Going to Raw Mode
+        exposeBufferlessTerminal();
+
+        while (read(STDIN_FILENO, &helper, 1) != 0 && helper != '\n')
+        {
+
+            if (helper == '|')
+                hasPipe++;
+
+            if (helper == '&')
+                hasBackgroundProcess++;
+
+            // Checks ctrl + D
+            if (iscntrl(helper) && helper == 4)
+                exit(1);
+
+            // Enables TAB predict flow
+            if (iscntrl(helper) && helper == 9)
+            {
+                printf("%s", "\n");
+                char copyInputCommand[MAX_LENGTH];
+                strcpy(copyInputCommand, inputCommand);
+                autoCompleteSelection(copyInputCommand, inputCommandPtr);
+            }
+            //Checks Backspace
+            else if (iscntrl(helper) && helper == 127)
+            {
+                if (inputCommandPtr)
+                {
+                    inputCommand[inputCommandPtr--] = '\0';
+                    printf("\b \b");
+                }
+            }
+            else
+            {
+                currRead[0] = helper;
+                inputCommand[inputCommandPtr++] = currRead[0];
+                printf("%c", currRead[0]);
+            }
+        }
+
+        printf("\n");
+
+        disableBufferlessTerminal();
+        //Coming back to Default Mode
+
+        inputCommand[inputCommandPtr] = '\0';
+
+        processInputAndRemoveSpaces(inputCommand);
+
+        char copyInputCommand[MAX_LENGTH];
+        strcpy(copyInputCommand, inputCommand);
+
+        addHisNodeEnd(inputCommand);
+
+        if (hasPipe)
+        {
+            int standardInputCopy = dup(0), standardOutputCopy = dup(1), i = 0, fileTracker[MAX_LENGTH];
+            char **token = parseAndCountInputs(inputCommand, "|", &numCmds);
+
+            for (i = 0; i < numCmds - 1; i++)
+            {
+                pipe(fileTracker);
+
+                if (dup2(fileTracker[1], 1) < 0)
+                {
+                    printf(RESET);
+                    printf(RED "File error, no such file found \n");
+                    printf(RESET);
+                    continue;
+                }
+
+                processCommandsInQueue(token[i]);
+
+                if (dup2(fileTracker[0], 0) < 0)
+                {
+                    printf(RESET);
+                    printf(RED "File error, no such file found \n");
+                    printf(RESET);
+                    continue;
+                }
+
+                close(fileTracker[1]);
+                close(fileTracker[0]);
+            }
+
+            if (dup2(standardOutputCopy, 1) < 0)
+            {
+                printf(RESET);
+                printf(RED "File error, no such file found \n");
+                printf(RESET);
+                continue;
+            }
+            processCommandsInQueue(token[i]);
+
+            if (dup2(standardInputCopy, 0) < 0)
+            {
+                printf(RESET);
+                printf(RED "File error, no such file found \n");
+                printf(RESET);
+                continue;
+            }
+
+            close(standardOutputCopy);
+            close(standardInputCopy);
+        }
+        else if (hasBackgroundProcess)
+        {
+
+            //"sleep 2& sleep 3&"
+            char *token = strtok(inputCommand, "&");
+            strncpy(copyInputCommand, token, sizeof(token));
+            copyInputCommand[strlen(token)] = ' ';
+            copyInputCommand[strlen(token) + 1] = '&';
+            copyInputCommand[strlen(token) + 2] = '\0';
+
+            // printf("After strok: %s\n", copyInputCommand);
+            //"sleep 2 &"
+
+            //Got sleep 2 & -- easier to pass arg later when using execvp
+            //While giving to execvp
+            //arg[0] = sleep
+            //arg[1] = 2
+
+            processInputAndRemoveSpaces(copyInputCommand);
+
+            if (copyInputCommand[strlen(copyInputCommand) - 1] == '\n')
+                copyInputCommand[strlen(copyInputCommand) - 1] = '\0';
+
+            char **commands = parseAndCountInputs(copyInputCommand, ";", &numCmds);
+            // printf("Commands after parsing \n");
+            for (ll i = 0; i < numCmds; i++)
+            {
+                // printf("%s\n", commands[i]);
+                processCommandsInQueue(commands[i]);
+            }
+            releaseMemoryAndFree(&commands, numCmds);
+
+            hasBackgroundProcess--;
+
+            //Repeat same //Got sleep 2 & for all commands followed by &
+            //Steps
+            // 1. Get one token that uses &
+            // 2. Separate all of them by ;
+            // 3. Run them by calling processInput function
+
+            while (token != NULL)
+            {
+                token = strtok(NULL, "&");
+
+                if (token != NULL)
+                {
+                    memset(copyInputCommand, 0, sizeof(copyInputCommand));
+                    /*
+
+                    When we do size of, it doesn't calculate the entire length, and treats space as limiter 
+                    Thats why kept it 500 or any const value
+                    */
+
+                    strncpy(copyInputCommand, token, 500);
+
+                    if (hasBackgroundProcess > 0)
+                    {
+                        copyInputCommand[strlen(token)] = ' ';
+                        copyInputCommand[strlen(token) + 1] = '&';
+                        copyInputCommand[strlen(token) + 2] = '\0';
+                        hasBackgroundProcess--;
+                    }
+
+                    processInputAndRemoveSpaces(copyInputCommand);
+
+                    if (copyInputCommand[strlen(copyInputCommand) - 1] == '\n')
+                        copyInputCommand[strlen(copyInputCommand) - 1] = '\0';
+
+                    char **commands = parseAndCountInputs(copyInputCommand, ";", &numCmds);
+                    for (ll i = 0; i < numCmds; i++)
+                    {
+                        processCommandsInQueue(commands[i]);
+                    }
+                    releaseMemoryAndFree(&commands, numCmds);
+                }
+            }
+        }
+        else
+        {
+            processInputAndRemoveSpaces(inputCommand);
+
+            if (inputCommand[strlen(input) - 1] == '\n')
+            {
+                inputCommand[strlen(input) - 1] = '\0';
+            }
+
+            char **commands = parseAndCountInputs(inputCommand, ";", &numCmds);
+
+            for (ll i = 0; i < numCmds; i++)
+            {
+                processCommandsInQueue(commands[i]);
+            }
+
+            releaseMemoryAndFree(&commands, numCmds);
+        }
+        memset(copyInputCommand, 0, sizeof(copyInputCommand));
+    }
 }
