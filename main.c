@@ -4,8 +4,6 @@ char currentUsername[MAX_LENGTH] = "";
 char currentSystemName[MAX_LENGTH] = "";
 char currentDirectoryHome[MAX_LENGTH] = "";
 char previousDirectoryHome[MAX_LENGTH] = "";
-char foreGroundProcessName[MAX_LENGTH] = "";
-int droppedProcesses[MAX_LENGTH];
 
 int parent = 0;
 int foregroundProcess = 0;
@@ -13,10 +11,7 @@ int foregroundProcess = 0;
 Process bgProcess[MAX_PROCESS_COUNT];
 Process fgProcess[MAX_PROCESS_COUNT];
 
-ll totalBGProcess = 1;
-ll totalBGProcessHistory = 1;
-int droppedProcessesCounter = 0;
-
+ll totalBGProcess = 0;
 bool dontPrintPrompt = false;
 
 char *historyTracker[HISTORY_MAX_SIZE + 1];
@@ -32,30 +27,6 @@ time_t getStartTime(pid_t pid)
     }
 }
 
-void ctrlZHandler(int signal)
-{
-
-    if (foregroundProcess)
-    {
-        backgroundNodeAddition(foregroundProcess, foreGroundProcessName);
-        kill(foregroundProcess, 2);
-        foregroundProcess = 0;
-        printf("\r");
-    }
-}
-
-void ctrlCHandler(int signal)
-{
-
-    if (foregroundProcess)
-    {
-
-        kill(foregroundProcess, 2);
-        foregroundProcess = 0;
-        printf("\r");
-    }
-}
-
 void childTermination(int signal)
 {
     int status;
@@ -66,9 +37,14 @@ void childTermination(int signal)
         Process a = findBGProcessName(wpid);
 
         if (WIFEXITED(status))
+        {
             printf("%s with pid %d exited normally\n", a.name, a.pid);
+        }
         else
+        {
             printf("%s with pid %d exited abnormally\n", a.name, a.pid);
+            return;
+        }
 
         shellInit();
     }
@@ -87,7 +63,6 @@ void getRootDirectory()
         printf(RED "Error getting previous directory");
     }
 }
-
 void shellInit()
 {
 
@@ -128,10 +103,6 @@ void shellInit()
 int main()
 {
 
-    signal(SIGTSTP, ctrlZHandler);
-    signal(SIGINT, ctrlCHandler);
-    signal(SIGCHLD, childTermination);
-
     char individual_command[MAX_LENGTH], *input, *commands;
     ll numCmds = 0;
     size_t input_size = 0;
@@ -140,11 +111,13 @@ int main()
     parent = getpid();
     fetchHistory();
 
+    signal(SIGCHLD, childTermination);
+
     //Initllay maintain prev and current directory as same direcrtorr
     strcpy(previousDirectoryHome, currentDirectoryHome);
-
     while (1)
     {
+        int isThreaded = 1;
 
         //prints userName@systName
         if (!dontPrintPrompt)
@@ -152,62 +125,18 @@ int main()
         else
             dontPrintPrompt = false;
 
-        fflush(stdout);
-
         char temp_string[MAX_LENGTH] = "", c;
 
         setbuf(stdout, NULL);
-        char currRead[2], temp, helper, inputCommand[MAX_LENGTH] = "";
+        char currRead[2];
+
+        char inputCommand[MAX_LENGTH] = "";
         int inputCommandPtr = 0;
-
-        int hasPipe = 0, hasBackgroundProcess = 0;
-
-        //Going to Raw Mode
-        exposeBufferlessTerminal();
-
-        while (read(STDIN_FILENO, &helper, 1) != 0 && helper != '\n')
+        while (read(0, currRead, 1) != 0 && currRead[0] != '\n')
         {
-
-            if (helper == '|')
-                hasPipe++;
-
-            if (helper == '&')
-                hasBackgroundProcess++;
-
-            // Checks ctrl + D
-            if (iscntrl(helper) && helper == 4)
-                exit(1);
-
-            // Enables TAB predict flow
-            if (iscntrl(helper) && helper == 9)
-            {
-                printf("%s", "\n");
-                char copyInputCommand[MAX_LENGTH];
-                strcpy(copyInputCommand, inputCommand);
-                autoCompleteSelection(copyInputCommand, inputCommandPtr);
-            }
-            //Checks Backspace
-            else if (iscntrl(helper) && helper == 127)
-            {
-                if (inputCommandPtr)
-                {
-                    inputCommand[inputCommandPtr--] = '\0';
-                    printf("\b \b");
-                }
-            }
-            else
-            {
-                currRead[0] = helper;
-                inputCommand[inputCommandPtr++] = currRead[0];
-                printf("%c", currRead[0]);
-            }
+            inputCommand[inputCommandPtr++] = currRead[0];
+            //printf("CurrRead: %s\n", currRead);
         }
-
-        printf("\n");
-
-        disableBufferlessTerminal();
-        //Coming back to Default Mode
-
         inputCommand[inputCommandPtr] = '\0';
 
         processInputAndRemoveSpaces(inputCommand);
@@ -217,62 +146,21 @@ int main()
 
         addHisNodeEnd(inputCommand);
 
-        if (hasPipe)
+        ll ANDCmdsCount = 0;
+
+        for (int i = 0; i < strlen(copyInputCommand); i++)
         {
-            int standardInputCopy = dup(0), standardOutputCopy = dup(1), i = 0, fileTracker[MAX_LENGTH];
-            char **token = parseAndCountInputs(inputCommand, "|", &numCmds);
-
-            for (i = 0; i < numCmds - 1; i++)
+            if (copyInputCommand[i] == '&')
             {
-                pipe(fileTracker);
-
-                if (dup2(fileTracker[1], 1) < 0)
-                {
-                    printf(RESET);
-                    printf(RED "File error, no such file found \n");
-                    printf(RESET);
-                    continue;
-                }
-
-                processCommandsInQueue(token[i]);
-
-                if (dup2(fileTracker[0], 0) < 0)
-                {
-                    printf(RESET);
-                    printf(RED "File error, no such file found \n");
-                    printf(RESET);
-                    continue;
-                }
-
-                close(fileTracker[1]);
-                close(fileTracker[0]);
+                ANDCmdsCount += 1;
             }
-
-            if (dup2(standardOutputCopy, 1) < 0)
-            {
-                printf(RESET);
-                printf(RED "File error, no such file found \n");
-                printf(RESET);
-                continue;
-            }
-            processCommandsInQueue(token[i]);
-
-            if (dup2(standardInputCopy, 0) < 0)
-            {
-                printf(RESET);
-                printf(RED "File error, no such file found \n");
-                printf(RESET);
-                continue;
-            }
-
-            close(standardOutputCopy);
-            close(standardInputCopy);
         }
-        else if (hasBackgroundProcess)
-        {
 
+        if (ANDCmdsCount)
+        {
             //"sleep 2& sleep 3&"
             char *token = strtok(inputCommand, "&");
+
             strncpy(copyInputCommand, token, sizeof(token));
             copyInputCommand[strlen(token)] = ' ';
             copyInputCommand[strlen(token) + 1] = '&';
@@ -300,7 +188,7 @@ int main()
             }
             releaseMemoryAndFree(&commands, numCmds);
 
-            hasBackgroundProcess--;
+            ANDCmdsCount--;
 
             //Repeat same //Got sleep 2 & for all commands followed by &
             //Steps
@@ -323,12 +211,12 @@ int main()
 
                     strncpy(copyInputCommand, token, 500);
 
-                    if (hasBackgroundProcess > 0)
+                    if (ANDCmdsCount > 0)
                     {
                         copyInputCommand[strlen(token)] = ' ';
                         copyInputCommand[strlen(token) + 1] = '&';
                         copyInputCommand[strlen(token) + 2] = '\0';
-                        hasBackgroundProcess--;
+                        ANDCmdsCount--;
                     }
 
                     processInputAndRemoveSpaces(copyInputCommand);
@@ -350,17 +238,13 @@ int main()
             processInputAndRemoveSpaces(inputCommand);
 
             if (inputCommand[strlen(input) - 1] == '\n')
-            {
                 inputCommand[strlen(input) - 1] = '\0';
-            }
 
             char **commands = parseAndCountInputs(inputCommand, ";", &numCmds);
-
             for (ll i = 0; i < numCmds; i++)
             {
                 processCommandsInQueue(commands[i]);
             }
-
             releaseMemoryAndFree(&commands, numCmds);
         }
         memset(copyInputCommand, 0, sizeof(copyInputCommand));

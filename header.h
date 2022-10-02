@@ -20,7 +20,6 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <stdbool.h>
-#include <termios.h>
 
 #define MAX_LENGTH 256
 #define ll long long int
@@ -69,10 +68,6 @@ void addHisNode(ll index, char *command);
 void addHisNodeEnd(char *command);
 void fetchHistory();
 
-void clearTerminos(const char *s);
-void disableBufferlessTerminal();
-void exposeBufferlessTerminal();
-
 //utility functions
 void processInputAndRemoveSpaces(char string[]);
 char *combination(char **passerParams, ll n);
@@ -86,7 +81,6 @@ time_t getStartTime(pid_t pid);
 typedef struct Process
 {
     char *name;
-    int jobNo;
     pid_t pid;
     time_t startTime;
 
@@ -99,20 +93,11 @@ Process findFGProcessName(pid_t pid);
 bool isProcessFG(pid_t pid, pid_t pgpid);
 bool isProcessBG(pid_t pid);
 void printAllProcessPINFO();
-char getProcessStatus(pid_t pid);
 
-void processIOCommands(char **passerParams, ll *totalArguments);
 bool isCmdNonRepetitive(char *cmd, char *ref);
 void dropOldestCmd();
 void addHisNodeEnd(char *command);
 void addHisNode(ll index, char *command);
-void sortBgNodes();
-
-void autoCompleteSelection(char inputCommand[MAX_LENGTH], int inputCommandPtr);
-void executeJobsCommand(char **passerParams, ll totalArguments);
-void signalRunningProcess(int processNo, int signal);
-void executeFgCommand(int processNo);
-void executeBgCommand(int processNo);
 
 // Global Variables
 
@@ -120,7 +105,6 @@ extern char currentUsername[MAX_LENGTH];
 extern char currentSystemName[MAX_LENGTH];
 extern char currentDirectoryHome[MAX_LENGTH];
 extern char previousDirectoryHome[MAX_LENGTH];
-extern int droppedProcesses[MAX_LENGTH];
 
 extern int foregroundProcess;
 extern int parent;
@@ -129,8 +113,6 @@ extern Process bgProcess[MAX_PROCESS_COUNT];
 extern Process fgProcess[MAX_PROCESS_COUNT];
 
 extern ll totalBGProcess;
-extern ll totalBGProcessHistory;
-extern int droppedProcessesCounter;
 
 extern char *historyTracker[HISTORY_MAX_SIZE + 1];
 extern bool dontPrintPrompt;

@@ -19,39 +19,6 @@ void getExePath(pid_t pid)
     printf("executable Path : %s\n", printPath);
 }
 
-char getProcessStatus(pid_t pid)
-{
-    char fileName[25];
-    char buf[10];
-
-    //Assuming no PID other than running PID is given
-
-    sprintf(fileName, "/proc/%d/stat", pid);
-
-    FILE *ptr = fopen(fileName, "r");
-
-    // If process does not exist
-    if (ptr == NULL)
-    {
-        //printf(RED "Process not found");
-        char state = '\0';
-        return state;
-    }
-
-    char state;
-
-    for (ll i = 1; i <= 3; i++)
-    {
-        fscanf(ptr, "%s", buf);
-        // printf("%lld %s\n", i, buf);
-
-        if (i == 3)
-            state = buf[0];
-    }
-
-    return state;
-}
-
 void pinfoCommand(pid_t pid)
 {
     /* Steps

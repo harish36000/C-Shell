@@ -1,4 +1,6 @@
-# C-Shell
+# README
+
+## Assignment 2
 
 A basic user defined interactive shell program that can  create and manage new processes.
 
@@ -20,15 +22,6 @@ A basic user defined interactive shell program that can  create and manage new p
    - time taken to run
 7. Supports an equivalent of find command, implemented as `discover` command
 8. Supports printing most recent 10 commands, implemented as `history`
-9. Implemented Input/Output Redirection using `<`, `>` and `>>`
-10. Implemented piping of commands
-11. Implemented user defined commands like
-    - `jobs`
-    - `sig`
-    - `fg`
-    - `bg`
-12. Implemented signal handling that handles keyboard interrupts like Ctrl + C, Ctrl + Z and Ctrl + D
-13. Implemented Autocomplete feature that autocompletes file and directory name when tab key is hit.
 
 ## Assumptions
 
@@ -36,7 +29,6 @@ A basic user defined interactive shell program that can  create and manage new p
 2. Maximum number of history commands stored at a time is 20.
    Out of which, 10 most recent commands will be printed
 3. Maximum number of processes that can run at a time is 1000
-4. After ith job is completed, new job will be assigned i+1. No new job will be assigned job number as i again.
 
 
 
@@ -85,20 +77,4 @@ A basic user defined interactive shell program that can  create and manage new p
 - utilsFun.c
 
   Contains code for string functions used for  parsing input, compressing path, removing character etc
-
-- exposeBufferlessTerminal.c
-
-  Contains code for moving the terminal to raw mode. 
-  
-- autoComplete.c
-
-  - Contains code for autoComplete function and all necessary functions needed for autcomplete feature
-
-- iocommands.c
-
-  - Contains code for processing input and output files
-
-- userDefinedCommands.c
-
-  - Contains code for executing jobs, sig, fg and bg command
 

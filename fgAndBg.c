@@ -1,52 +1,29 @@
 #include "header.h"
 
-int isInDropped(int i)  {
-
-    for( int j = 0 ; j < droppedProcessesCounter ; j++ )
-        if(droppedProcesses[j] == i)
-            return 0;
-        
-    return 1;
-
-}
-
-void sortBgNodes() {
-
-    if(totalBGProcessHistory == 1)
-        return;
-
-
-    for (int i = 1; i <= totalBGProcessHistory; i++)    {
-        for (int j = 1; j < totalBGProcessHistory - i - 1; j++)    {
-
-            if (isInDropped(j+1) && isInDropped(j) && strcmp(bgProcess[j].name, bgProcess[j + 1].name) > 0)    {
-
-                Process temp = bgProcess[j];
-
-                bgProcess[j] = bgProcess[j+1];
-                bgProcess[j+1] = temp;
-
-            }
+void backgroundNodeAddition(pid_t pid, char *process_name)
+{
+    ll emptyIndex = -1;
+    for (ll i = 0; i < MAX_PROCESS_COUNT; i++)
+    {
+        if (bgProcess[i].name == NULL)
+        {
+            //printf("empty found at %ld\n", i);
+            emptyIndex = i;
+            break;
         }
     }
 
-}
+    if (emptyIndex == -1)
+    {
+        printf(RED "Max process amount reached\n");
+    }
 
-void backgroundNodeAddition(pid_t pid, char *process_name)  {
-
-    ll emptyIndex = totalBGProcessHistory;
-
+    //Add entry to bgPorcess
     totalBGProcess++;
-    totalBGProcessHistory++;
-
     bgProcess[emptyIndex].name = malloc(sizeof(char) * strlen(process_name));
     strcpy(bgProcess[emptyIndex].name, process_name);
     bgProcess[emptyIndex].pid = pid;
     bgProcess[emptyIndex].startTime = time(0);
-    bgProcess[emptyIndex].jobNo = emptyIndex;
-
-    sortBgNodes();
-
 }
 
 void backgroundProcessExecution(char **passerParams, ll totalArguments)
@@ -71,7 +48,7 @@ void backgroundProcessExecution(char **passerParams, ll totalArguments)
     else
     {
 
-        printf("[%lld] %d\n", totalBGProcessHistory, pid);
+        printf("[%lld] %d\n", totalBGProcess, pid);
 
         char *pname = combination(passerParams, totalArguments);
         backgroundNodeAddition(pid, pname);
@@ -80,7 +57,8 @@ void backgroundProcessExecution(char **passerParams, ll totalArguments)
     }
 }
 
-void foregroundProcessExecution(char **passerParams, ll totalArguments) {
+void foregroundProcessExecution(char **passerParams, ll totalArguments)
+{
     pid_t pid;
     int status;
     pid = fork();
@@ -88,7 +66,7 @@ void foregroundProcessExecution(char **passerParams, ll totalArguments) {
     {
         if (execvp(passerParams[0], passerParams) == -1)
         {
-            printf(RED "Shell Error\n");
+            printf(RED "Shell Error \n");
         }
         exit(1);
     }
@@ -146,10 +124,9 @@ Process findBGProcessName(int pid)
             retProcess.pid = bgProcess[i].pid;
 
             //free memory
-            // free(bgProcess[i].name);
-            // bgProcess[i].name = NULL;
-            // bgProcess[i].pid = 0;
-            
+            free(bgProcess[i].name);
+            bgProcess[i].name = NULL;
+            bgProcess[i].pid = 0;
             totalBGProcess--;
 
             return retProcess;

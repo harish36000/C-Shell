@@ -139,14 +139,8 @@ void executePwdCommand()
 
 void processCommandsInQueue(char command[])
 {
-
     ll totalArguments;
     char **passerParams = parseAndCountInputs(command, " ", &totalArguments);
-
-    int standardInputCopy = dup(0);
-    int standardOutputCopy = dup(1);
-
-    processIOCommands(passerParams, &totalArguments);
 
     if (passerParams != NULL)
     {
@@ -154,9 +148,7 @@ void processCommandsInQueue(char command[])
         {
             if (totalArguments > 2)
             {
-                printf(RESET);
-                printf(RED "Invalid number of parameters");
-                printf(RESET);
+                fprintf(stderr, "\e[0;91mError: Invalid number of passerParamss\n\e[0m");
             }
             else
                 executeCDCommand(passerParams, totalArguments);
@@ -203,39 +195,9 @@ void processCommandsInQueue(char command[])
         {
             ls(passerParams, totalArguments);
         }
-        else if (!strcmp(passerParams[0], "jobs"))
-        {
-            executeJobsCommand(passerParams, totalArguments);
-        }
-        else if (!strcmp(passerParams[0], "sig"))
-        {
-            if (totalArguments < 3)
-            {
-                printf("Incorrent signal input, please enter a signal after processId\n");
-            }
-            else
-                signalRunningProcess(atoi(passerParams[1]), atoi(passerParams[2]));
-        }
-        else if (!strcmp(passerParams[0], "fg"))
-        {
-            if (totalArguments < 2)
-            {
-                printf("Incorrent fd command, please input processId\n");
-            }
-            else
-                executeFgCommand(atoi(passerParams[1]));
-        }
-        else if (!strcmp(passerParams[0], "bg"))
-        {
-            if (totalArguments < 2)
-            {
-                printf("Incorrent bg command, please input processId\n");
-            }
-            else
-                executeBgCommand(atoi(passerParams[1]));
-        }
         else
         {
+
             if (!strcmp(passerParams[totalArguments - 1], "&"))
             {
                 /* For execvp 
@@ -286,22 +248,6 @@ void processCommandsInQueue(char command[])
                 }
             }
         }
-        if (dup2(standardInputCopy, 0) < 0)
-        {
-            printf(RESET);
-            printf(RED "dup2 Error");
-            printf(RESET);
-            return;
-        }
-        close(standardInputCopy);
-        if (dup2(standardOutputCopy, 1) < 0)
-        {
-            printf(RESET);
-            printf(RED "dup2 Error");
-            printf(RESET);
-            return;
-        }
-        close(standardOutputCopy);
 
         releaseMemoryAndFree(&passerParams, totalArguments);
     }
