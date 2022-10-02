@@ -1,6 +1,4 @@
-# README
-
-## Assignment 3
+# C-Shell
 
 A basic user defined interactive shell program that can  create and manage new processes.
 
